@@ -1,12 +1,12 @@
 # include <stdio.h>
 # include <stdlib.h>
 # include <math.h>
+# include <string.h>
 # include "symnmf.h"
 
-#define DEFAULT_ITERS_NUM (300)
-#define MAX_ITERS_NUM (1000)
+#define MAX_ITERS_NUM (300)
 #define BETA (0.5)
-#define EPSILON (0.1)
+#define EPSILON (0.0001)
 
 double dist(double *p1, double *p2, int dim){  
     double distance = 0.0;
@@ -17,7 +17,7 @@ double dist(double *p1, double *p2, int dim){
     return distance;
 }
 
-double** initMatrix(int width, int height){
+double** initMatrix(int height, int width){
     int i, j;
     double** matrix = (double**)calloc(height, sizeof(double*));
     if(!matrix){
@@ -40,7 +40,7 @@ double** initMatrix(int width, int height){
 
 double** transpose(double** matrix, int height, int width){
     int i, j;
-    double** transposed = initMatrix(height, width);
+    double** transposed = initMatrix(width, height);
     for(i=0; i<height; i++){
         for(j=0; j<width; j++){
             transposed[j][i] = matrix[i][j];
@@ -76,13 +76,13 @@ double** matrixMult(double** A, double** B, int heightA, int widthA, int widthB)
     return matrixMult;
 }
 
-double** subMatrixes(double** mat1, double** mat2, int size)
+double** subMatrixes(double** mat1, double** mat2, int height, int width)
 {
     int i, j;
-    double** matrixSub = initMatrix(size, size);
-    for (i = 0; i < size; i++)
+    double** matrixSub = initMatrix(height, width);
+    for (i = 0; i < height; i++)
     {
-        for(j = 0; j < size; j++)
+        for(j = 0; j < width; j++)
         {
             matrixSub[i][j] = mat1[i][j] - mat2[i][j];
         }
@@ -90,19 +90,69 @@ double** subMatrixes(double** mat1, double** mat2, int size)
     return matrixSub;  
 }
 
-double squaredForbeniusNorm(double** matrix, int size)
+double squaredForbeniusNorm(double** matrix, int height, int width)
 {
     double sqNorm = 0;
     int i, j;
-    for (i = 0; i < size; i++)
+    for (i = 0; i < height; i++)
     {
-        for(j = 0; j < size; j++){
+        for(j = 0; j < width; j++){
             sqNorm += pow(matrix[i][j], 2);
         }
     }
     return sqNorm;
 }
 
+double** getPointsFromFile(const char* filename, int* numOfPoints, int* dimension){
+    double** matrix;
+    char* token;
+    char buffer[1024];
+    int rows = 0, cols = 0, currentRow = 0, currentCol = 0;
+    FILE *fp = fopen(filename, "r");
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        rows++;
+    }
+    rewind(fp);
+    fgets(buffer, sizeof(buffer), fp);
+    token = strtok(buffer, ",");
+    while (token != NULL) {
+        cols++;
+        token = strtok(NULL, ",");
+    }
+    fclose(fp);
+    *numOfPoints = rows;
+    *dimension = cols;
+    matrix = initMatrix(rows, cols);
+    fp = fopen(filename, "r");
+    while (fgets(buffer, sizeof(buffer), fp) != NULL && currentRow < rows) {
+        currentCol = 0;
+        token = strtok(buffer, ",");
+        while (token != NULL && currentCol < cols) {
+            matrix[currentRow][currentCol] = atof(token);
+            currentCol++;
+            token = strtok(NULL, ",");
+        }
+        currentRow++;
+    }
+    fclose(fp);
+    return matrix;
+}
+
+void printMatrix(double** matrix, int height, int width){
+    int i, j;
+    for(i = 0; i < height; i++){
+        for(j = 0; j < width; j++){
+            printf("%.4f", matrix[i][j]);
+            if(j != width - 1){
+                printf(",");
+            }
+            else
+            {
+                printf("\n");   
+            }
+        }
+    }
+}
 
 double** computeSym(int numOfPoints, int dimension, double** pointsArr){
     int i, j;
@@ -123,8 +173,9 @@ double** computeSym(int numOfPoints, int dimension, double** pointsArr){
 double** computeDdg(int numOfPoints, int dimension, double** pointsArr) {
     int i, j;
     double sum = 0;
-    double** symMatrix = sym(numOfPoints, dimension, pointsArr);
+    double** symMatrix = computeSym(numOfPoints, dimension, pointsArr);
     double** ddgMatrix = initMatrix(numOfPoints, numOfPoints);
+
     for(i = 0; i < numOfPoints; i++){
         for(j = 0; j < numOfPoints; j++){
             sum += symMatrix[i][j];
@@ -137,10 +188,10 @@ double** computeDdg(int numOfPoints, int dimension, double** pointsArr) {
 }
 
 double** computeNorm(int numOfPoints, int dimension, double** pointsArr) {
-    int i, j;
+    int i;
     double** normMatrix;
-    double** symMatrix = sym(numOfPoints, dimension, pointsArr);
-    double** ddgMatrix = ddg(numOfPoints, dimension, pointsArr);
+    double** symMatrix = computeSym(numOfPoints, dimension, pointsArr);
+    double** ddgMatrix = computeDdg(numOfPoints, dimension, pointsArr);
     for (i=0; i< numOfPoints; i++) {
         ddgMatrix[i][i] = 1/sqrt(ddgMatrix[i][i]);
     }
@@ -151,22 +202,69 @@ double** computeNorm(int numOfPoints, int dimension, double** pointsArr) {
     return normMatrix;
 }
 
-double** updateH(int numOfPoints, int dimension, double** H, double** W){
+double** updateH(int numOfPoints, int k, double** H, double** W){
     int i, j;
-    double nextH = initMatrix(numOfPoints, dimension);
-    double** numerator = matrixMult(W, H, numOfPoints, numOfPoints, dimension);
-    double** denominator = matrixMult(H, transpose(H, numOfPoints, dimension), numOfPoints, dimension, numOfPoints);
-    denominator = matrixMult(denominator, H, numOfPoints, numOfPoints, dimension);
+    double** nextH = initMatrix(numOfPoints, k);
+    double** numerator = matrixMult(W, H, numOfPoints, numOfPoints, k);
+    double** transposed = transpose(H, numOfPoints, k);
+    double** tempDenominator = matrixMult(H, transposed, numOfPoints, k, numOfPoints);
+    double** denominator = matrixMult(tempDenominator, H, numOfPoints, numOfPoints, k);
     for(i = 0; i<numOfPoints; i++){
-        for(j=0; j<dimension; j++){
+        for(j=0; j<k; j++){
             nextH[i][j] = H[i][j]*(1-BETA+BETA*(numerator[i][j]/denominator[i][j]));
         }
     }
+    freeMatrix(tempDenominator, numOfPoints);
+    freeMatrix(transposed, k);
+    freeMatrix(numerator, numOfPoints);
+    freeMatrix(denominator, numOfPoints);
     return nextH;
 }
 
-double** optimizeH(int numOfPoints, int dimension, double** H, double** W)
+double** optimizeH(int numOfPoints, int k, double** H, double** W)
 {
-    double** W = initMatrix(    )
+    int iterations = 0;
+    double** curH = H;
+    double** nextH = updateH(numOfPoints, k, curH, W);
+    double** differenceMatrix = subMatrixes(nextH, curH, numOfPoints, k);
+    while(squaredForbeniusNorm(differenceMatrix, numOfPoints, k) >= EPSILON && iterations < MAX_ITERS_NUM){
+        freeMatrix(curH, numOfPoints);
+        freeMatrix(differenceMatrix, numOfPoints);
+        curH = nextH;
+        nextH = updateH(numOfPoints, k, curH, W);
+        differenceMatrix = subMatrixes(nextH, curH, numOfPoints, k);
+        iterations++;
+    }
+    freeMatrix(differenceMatrix, numOfPoints);
+    freeMatrix(curH, numOfPoints);
+    return nextH;
+}
+
+int main(int argc, char **argv){
+    int numOfPoints, dimension;
+    const char* goal = argv[1];
+    const char* filename  = argv[2];
+    double** matrix;
+    double** pointsArr;
+
+    if(argc == 0){
+        return -1;
+    }
+    pointsArr = getPointsFromFile(filename, &numOfPoints, &dimension);
+    if(strcmp(goal, "sym") == 0){
+        matrix = computeSym(numOfPoints, dimension, pointsArr);
+    } 
+    else if (strcmp(goal, "ddg") == 0){
+        matrix = computeDdg(numOfPoints, dimension, pointsArr);
+    }
+    else if (strcmp(goal, "norm") == 0){
+        matrix = computeNorm(numOfPoints, dimension, pointsArr);
+    }
+    else{
+        return -1;
+    }
+    printMatrix(matrix, numOfPoints, numOfPoints);
+    freeMatrix(matrix, numOfPoints);
+    return 0;
 }
    

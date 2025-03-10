@@ -46,26 +46,22 @@ static PyObject* makePyMatrix(int height, int width, double **cMatrix){
         PyList_SetItem(pyMatrix, i, line);  
     }
     return pyMatrix;
-
 }
 
 static PyObject* symnmf(PyObject* self, PyObject* args){
-    PyObject *W, *H, *line, *pyFinalH;
+    PyObject *W, *H, *pyFinalH;
     double **cWMatrix, **cHMatrix, **cFinalH;
-    int numOfPoints, dimension;
+    int numOfPoints, k;
 
-    if(!PyArg_ParseTuple(args, "OO", &W, &H)){
+    if(!PyArg_ParseTuple(args, "OOi", &W, &H, &k)){
         printf("An Error Has Occurred\n");
         return NULL;
     }
-    numOfPoints = PyList_Size(W);
-    line = PyList_GetItem(W, 0);
-    dimension = PyList_Size(line);
-    cWMatrix = makeCMatrix(numOfPoints, dimension, W);
-    cHMatrix = makeCMatrix(numOfPoints, dimension, H);
-    cFinalH = optimizeH(numOfPoints, dimension, cHMatrix, cWMatrix);
-    pyFinalH = makePyMatrix(numOfPoints, dimension, cFinalH);
-    freeMatrix(cHMatrix, numOfPoints);
+    numOfPoints = PyList_Size(H);
+    cWMatrix = makeCMatrix(numOfPoints, numOfPoints, W);
+    cHMatrix = makeCMatrix(numOfPoints, k, H);
+    cFinalH = optimizeH(numOfPoints, k, cHMatrix, cWMatrix);
+    pyFinalH = makePyMatrix(numOfPoints, k, cFinalH);
     freeMatrix(cWMatrix, numOfPoints);
     freeMatrix(cFinalH, numOfPoints);
     return pyFinalH;
@@ -83,9 +79,9 @@ static PyObject* sym(PyObject* self, PyObject* args){
     numOfPoints = PyList_Size(pointsArr);
     line = PyList_GetItem(pointsArr, 0);
     dimension = PyList_Size(line);
-    cPointsArr = makeCMatrix(numOfPoints, dimension);
+    cPointsArr = makeCMatrix(numOfPoints, dimension, pointsArr);
     cSymMatrix = computeSym(numOfPoints, dimension, cPointsArr);
-    pySymMatrix = makePyMatrix(numOfPoints, dimension, cSymMatrix);
+    pySymMatrix = makePyMatrix(numOfPoints, numOfPoints, cSymMatrix);
     freeMatrix(cPointsArr, numOfPoints);
     freeMatrix(cSymMatrix, numOfPoints);
     return pySymMatrix;
@@ -103,9 +99,9 @@ static PyObject* ddg(PyObject* self, PyObject* args){
     numOfPoints = PyList_Size(pointsArr);
     line = PyList_GetItem(pointsArr, 0);
     dimension = PyList_Size(line);
-    cPointsArr = makeCMatrix(numOfPoints, dimension);
+    cPointsArr = makeCMatrix(numOfPoints, dimension, pointsArr);
     cDdgMatrix = computeDdg(numOfPoints, dimension, cPointsArr);
-    pyDdgMatrix = makePyMatrix(numOfPoints, dimension, cDdgMatrix);
+    pyDdgMatrix = makePyMatrix(numOfPoints, numOfPoints, cDdgMatrix);
     freeMatrix(cPointsArr, numOfPoints);
     freeMatrix(cDdgMatrix, numOfPoints);
     return pyDdgMatrix;
@@ -123,9 +119,9 @@ static PyObject* norm(PyObject* self, PyObject* args){
     numOfPoints = PyList_Size(pointsArr);
     line = PyList_GetItem(pointsArr, 0);
     dimension = PyList_Size(line);
-    cPointsArr = makeCMatrix(numOfPoints, dimension);
+    cPointsArr = makeCMatrix(numOfPoints, dimension, pointsArr);
     cNormMatrix = computeNorm(numOfPoints, dimension, cPointsArr);
-    pyNormMatrix = makePyMatrix(numOfPoints, dimension, cNormMatrix);
+    pyNormMatrix = makePyMatrix(numOfPoints, numOfPoints, cNormMatrix);
     freeMatrix(cPointsArr, numOfPoints);
     freeMatrix(cNormMatrix, numOfPoints);
     return pyNormMatrix;
